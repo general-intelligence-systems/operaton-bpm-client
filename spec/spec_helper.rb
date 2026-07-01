@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "operaton-external-task-client"
+require "operaton-bpm-client"
 require_relative "support/stub_engine_server"
 
 # Silence client logging during tests

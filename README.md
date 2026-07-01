@@ -25,7 +25,7 @@ Exception classes from `org.operaton.bpm.client.exception` live directly under
 ## Usage
 
 ```ruby
-require "operaton-external-task-client"
+require "operaton-bpm-client"
 
 client = Operaton::Bpm::Client::ExternalTaskClient.create
   .base_url("http://localhost:8080/engine-rest")

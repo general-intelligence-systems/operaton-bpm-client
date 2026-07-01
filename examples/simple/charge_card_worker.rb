@@ -21,7 +21,7 @@
 #
 # Run `docker compose up -d` first, then: ruby examples/simple/charge_card_worker.rb
 
-require_relative "../../lib/operaton-external-task-client"
+require_relative "../../lib/operaton-bpm-client"
 require_relative "../support/engine_rest"
 
 engine = Examples::EngineRest.new

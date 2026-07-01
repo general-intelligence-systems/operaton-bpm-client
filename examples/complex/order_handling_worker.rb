@@ -15,7 +15,7 @@
 
 require "time"
 require "timeout"
-require_relative "../../lib/operaton-external-task-client"
+require_relative "../../lib/operaton-bpm-client"
 require_relative "../support/engine_rest"
 
 Variables = Operaton::Bpm::Engine::Variable::Variables
