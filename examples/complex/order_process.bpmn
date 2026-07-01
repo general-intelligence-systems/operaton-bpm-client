@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:operaton="http://operaton.org/schema/1.0/bpmn"
+             id="order-process-definitions"
+             targetNamespace="http://operaton.org/examples"
+             xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd">
+
+  <error id="Error_PaymentFailed" name="Payment failed" errorCode="PAYMENT_FAILED"/>
+
+  <!-- An "order handling" style process exercising the richer parts of the
+       external task client: multiple topics, typed/object variables,
+       failures with retries, BPMN errors caught by a boundary event. -->
+  <process id="order-process" name="Order Handling" isExecutable="true"
+           operaton:historyTimeToLive="P30D">
+
+    <startEvent id="OrderReceived" name="Order received">
+      <outgoing>toValidate</outgoing>
+    </startEvent>
+
+    <sequenceFlow id="toValidate" sourceRef="OrderReceived" targetRef="ValidateOrder"/>
+
+    <serviceTask id="ValidateOrder" name="Validate order"
+                 operaton:type="external" operaton:topic="order-validation">
+      <incoming>toValidate</incoming>
+      <outgoing>toApprovedGateway</outgoing>
+    </serviceTask>
+
+    <sequenceFlow id="toApprovedGateway" sourceRef="ValidateOrder" targetRef="ApprovedGateway"/>
+
+    <exclusiveGateway id="ApprovedGateway" name="Approved?">
+      <incoming>toApprovedGateway</incoming>
+      <outgoing>toPayment</outgoing>
+      <outgoing>toRejected</outgoing>
+    </exclusiveGateway>
+
+    <sequenceFlow id="toPayment" name="yes" sourceRef="ApprovedGateway" targetRef="ProcessPayment">
+      <conditionExpression xsi:type="tFormalExpression">${approved}</conditionExpression>
+    </sequenceFlow>
+
+    <sequenceFlow id="toRejected" name="no" sourceRef="ApprovedGateway" targetRef="OrderRejected">
+      <conditionExpression xsi:type="tFormalExpression">${not approved}</conditionExpression>
+    </sequenceFlow>
+
+    <serviceTask id="ProcessPayment" name="Process payment"
+                 operaton:type="external" operaton:topic="payment">
+      <incoming>toPayment</incoming>
+      <outgoing>toShipping</outgoing>
+    </serviceTask>
+
+    <boundaryEvent id="CatchPaymentFailed" name="Payment failed" attachedToRef="ProcessPayment">
+      <outgoing>toCancellation</outgoing>
+      <errorEventDefinition id="PaymentFailedDefinition" errorRef="Error_PaymentFailed"/>
+    </boundaryEvent>
+
+    <sequenceFlow id="toShipping" sourceRef="ProcessPayment" targetRef="ShipOrder"/>
+    <sequenceFlow id="toCancellation" sourceRef="CatchPaymentFailed" targetRef="CancelOrder"/>
+
+    <serviceTask id="ShipOrder" name="Ship order"
+                 operaton:type="external" operaton:topic="order-shipping">
+      <incoming>toShipping</incoming>
+      <outgoing>toShipped</outgoing>
+    </serviceTask>
+
+    <serviceTask id="CancelOrder" name="Cancel order"
+                 operaton:type="external" operaton:topic="order-cancellation">
+      <incoming>toCancellation</incoming>
+      <outgoing>toCancelled</outgoing>
+    </serviceTask>
+
+    <sequenceFlow id="toShipped" sourceRef="ShipOrder" targetRef="OrderShipped"/>
+    <sequenceFlow id="toCancelled" sourceRef="CancelOrder" targetRef="OrderCancelled"/>
+
+    <endEvent id="OrderShipped" name="Order shipped">
+      <incoming>toShipped</incoming>
+    </endEvent>
+
+    <endEvent id="OrderCancelled" name="Order cancelled">
+      <incoming>toCancelled</incoming>
+    </endEvent>
+
+    <endEvent id="OrderRejected" name="Order rejected">
+      <incoming>toRejected</incoming>
+    </endEvent>
+  </process>
+</definitions>

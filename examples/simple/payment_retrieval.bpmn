@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:operaton="http://operaton.org/schema/1.0/bpmn"
+             id="payment-retrieval-definitions"
+             targetNamespace="http://operaton.org/examples"
+             xsi:schemaLocation="http://www.omg.org/spec/BPMN/20100524/MODEL BPMN20.xsd">
+
+  <!-- The "charge card" quick-start process from the Operaton/Camunda
+       external task client documentation: a single external service task. -->
+  <process id="payment-retrieval" name="Payment Retrieval" isExecutable="true"
+           operaton:historyTimeToLive="P30D">
+    <startEvent id="PaymentRequested" name="Payment requested">
+      <outgoing>toChargeCard</outgoing>
+    </startEvent>
+
+    <sequenceFlow id="toChargeCard" sourceRef="PaymentRequested" targetRef="ChargeCard"/>
+
+    <serviceTask id="ChargeCard" name="Charge credit card"
+                 operaton:type="external" operaton:topic="charge-card">
+      <incoming>toChargeCard</incoming>
+      <outgoing>toPaymentReceived</outgoing>
+    </serviceTask>
+
+    <sequenceFlow id="toPaymentReceived" sourceRef="ChargeCard" targetRef="PaymentReceived"/>
+
+    <endEvent id="PaymentReceived" name="Payment received">
+      <incoming>toPaymentReceived</incoming>
+    </endEvent>
+  </process>
+</definitions>

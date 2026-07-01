@@ -1,0 +1,15 @@
+services:
+  operaton:
+    image: operaton/operaton:latest
+    container_name: operaton
+    ports:
+      - "8080:8080"
+    environment:
+      # Give the JVM a bit of room; the default H2 in-memory setup is used.
+      JAVA_OPTS: "-Xmx768m -XX:MaxMetaspaceSize=256m"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/engine-rest/engine || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
