@@ -1,0 +1,16 @@
+# Git hooks managed by lefthook. Run `bundle exec lefthook install` after
+# `bundle install` to wire the hooks into .git/hooks/.
+#
+# pre-commit runs both checks in parallel; either failing aborts the commit.
+# rubocop only sees the staged .rb files (fast even in a big repo). scampi
+# always runs the full co-located suite so a change in one file that breaks a
+# spec in another is caught here rather than in CI.
+
+pre-commit:
+  parallel: true
+  commands:
+    rubocop:
+      glob: "*.rb"
+      run: bundle exec rubocop --force-exclusion {staged_files}
+    scampi:
+      run: bundle exec scampi

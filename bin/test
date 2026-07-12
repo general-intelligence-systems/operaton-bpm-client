@@ -1,3 +1,6 @@
 #!/usr/bin/env bash
+# Runs the same checks as the pre-commit hook (scampi + rubocop), so CI and
+# local `bin/test` cannot drift from what a commit is required to pass.
+set -euo pipefail
 
-bundle exec scampi
+bundle exec lefthook run pre-commit --all-files
