@@ -347,3 +347,124 @@ module Operaton
     end
   end
 end
+
+__END__
+
+require "operaton-bpm-client"
+require "socket"
+
+# Silence client logging during tests (mirrors spec_helper)
+Operaton::Bpm::Client.logger = Logger.new(File::NULL)
+
+describe Operaton::Bpm::Client::Impl::ExternalTaskClientBuilderImpl do
+  before do
+    @builder = lambda do
+      Operaton::Bpm::Client::ExternalTaskClient.create
+        .base_url("http://localhost:8080/engine-rest")
+        .disable_auto_fetching
+    end
+  end
+
+  it "builds a client with defaults matching the Java client" do
+    client = @builder.call.build
+    client.should.be.kind_of(Operaton::Bpm::Client::Impl::ExternalTaskClientImpl)
+    client.active?.should == false
+
+    engine_client = client.topic_subscription_manager.engine_client
+    engine_client.max_tasks.should == 10
+    engine_client.use_priority?.should == true
+    engine_client.async_response_timeout.should.be.nil
+    engine_client.base_url.should == "http://localhost:8080/engine-rest"
+  end
+
+  it "generates a worker id from hostname and uuid when not given" do
+    engine_client = @builder.call.build.topic_subscription_manager.engine_client
+    engine_client.worker_id.should.include(Socket.gethostname)
+    engine_client.worker_id.should.match(/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
+  end
+
+  it "keeps an explicitly configured worker id" do
+    client = @builder.call.worker_id("worker-1").build
+    client.topic_subscription_manager.engine_client.worker_id.should == "worker-1"
+  end
+
+  it "sanitizes trailing slashes from the base url" do
+    client = Operaton::Bpm::Client::ExternalTaskClient.create
+                                                      .base_url("  http://localhost:8080/engine-rest/// ")
+                                                      .disable_auto_fetching
+                                                      .build
+    client.topic_subscription_manager.engine_client.base_url
+          .should == "http://localhost:8080/engine-rest"
+  end
+
+  it "rejects a missing base url" do
+    err = lambda { Operaton::Bpm::Client::ExternalTaskClient.create.build }
+          .should.raise(Operaton::Bpm::Client::ExternalTaskClientException)
+    err.message.should.match(/Base URL cannot be null/)
+  end
+
+  it "rejects maxTasks <= 0" do
+    err = lambda { @builder.call.max_tasks(0).build }
+          .should.raise(Operaton::Bpm::Client::ExternalTaskClientException)
+    err.message.should.match(/Maximum amount of fetched tasks/)
+  end
+
+  it "rejects asyncResponseTimeout <= 0" do
+    err = lambda { @builder.call.async_response_timeout(0).build }
+          .should.raise(Operaton::Bpm::Client::ExternalTaskClientException)
+    err.message.should.match(/Asynchronous response timeout/)
+  end
+
+  it "rejects lockDuration <= 0" do
+    err = lambda { @builder.call.lock_duration(0).build }
+          .should.raise(Operaton::Bpm::Client::ExternalTaskClientException)
+    err.message.should.match(/Lock duration must be greater than 0/)
+  end
+
+  it "rejects nil interceptors" do
+    err = lambda { @builder.call.add_interceptor(nil).build }
+          .should.raise(Operaton::Bpm::Client::ExternalTaskClientException)
+    err.message.should.match(/Interceptor cannot be null/)
+  end
+
+  describe "ordering configuration" do
+    it "rejects asc() without orderBy" do
+      err = lambda { @builder.call.asc }
+            .should.raise(Operaton::Bpm::Client::ExternalTaskClientException)
+      err.message.should.match(/orderBy methods first/)
+    end
+
+    it "rejects a double direction" do
+      err = lambda { @builder.call.order_by_create_time.desc.asc }
+            .should.raise(Operaton::Bpm::Client::ExternalTaskClientException)
+      err.message.should.match(/only one direction/)
+    end
+
+    it "rejects a missing direction on build" do
+      err = lambda { @builder.call.order_by_create_time.build }
+            .should.raise(Operaton::Bpm::Client::ExternalTaskClientException)
+      err.message.should.match(/call asc\(\) or desc\(\)/)
+    end
+
+    it "accepts orderByCreateTime().desc()" do
+      client = @builder.call.order_by_create_time.desc.build
+      sorting = client.topic_subscription_manager.engine_client.ordering_config.to_sorting_dtos
+      sorting.map(&:as_json).should == [{ "sortBy" => "createTime", "sortOrder" => "desc" }]
+    end
+
+    it "configures createTime desc through useCreateTime(true)" do
+      client = @builder.call.use_create_time(true).build
+      sorting = client.topic_subscription_manager.engine_client.ordering_config.to_sorting_dtos
+      sorting.map(&:as_json).should == [{ "sortBy" => "createTime", "sortOrder" => "desc" }]
+    end
+  end
+
+  it "starts fetching immediately unless auto fetching is disabled" do
+    client = Operaton::Bpm::Client::ExternalTaskClient.create
+                                                      .base_url("http://localhost:1") # never reached: no subscriptions
+                                                      .build
+    client.active?.should == true
+    client.stop
+    client.active?.should == false
+  end
+end

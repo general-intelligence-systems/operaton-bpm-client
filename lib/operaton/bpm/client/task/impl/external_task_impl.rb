@@ -126,3 +126,72 @@ module Operaton
     end
   end
 end
+
+__END__
+
+require "operaton-bpm-client"
+
+describe Operaton::Bpm::Client::Task::Impl::ExternalTaskImpl do
+  before do
+    @object_mapper = Operaton::Bpm::Client::Impl::ObjectMapper.new
+    @task = Operaton::Bpm::Client::Task::Impl::ExternalTaskImpl.from_json(
+      {
+        "activityId" => "ServiceTask_1",
+        "activityInstanceId" => "ServiceTask_1:instance",
+        "businessKey" => "order-4711",
+        "createTime" => "2024-05-17T10:00:00.000+0000",
+        "errorDetails" => nil,
+        "errorMessage" => nil,
+        "executionId" => "execution-1",
+        "extensionProperties" => { "prop" => "value" },
+        "id" => "task-1",
+        "lockExpirationTime" => "2024-05-17T10:05:00.000+0000",
+        "priority" => 50,
+        "processDefinitionId" => "invoice:1:abc",
+        "processDefinitionKey" => "invoice",
+        "processDefinitionVersionTag" => "v1",
+        "processInstanceId" => "process-1",
+        "retries" => 3,
+        "tenantId" => "tenant-1",
+        "topicName" => "invoice-topic",
+        "workerId" => "worker-1",
+        "variables" => {
+          "amount" => { "value" => 42.5, "type" => "Double", "valueInfo" => {} }
+        }
+      },
+      @object_mapper
+    )
+  end
+
+  it "parses all scalar fields" do
+    @task.id.should == "task-1"
+    @task.activity_id.should == "ServiceTask_1"
+    @task.business_key.should == "order-4711"
+    @task.process_definition_key.should == "invoice"
+    @task.retries.should == 3
+    @task.priority.should == 50
+    @task.tenant_id.should == "tenant-1"
+    @task.topic_name.should == "invoice-topic"
+  end
+
+  it "parses dates with the configured format" do
+    @task.create_time.should == Time.utc(2024, 5, 17, 10, 0, 0)
+    @task.lock_expiration_time.should == Time.utc(2024, 5, 17, 10, 5, 0)
+  end
+
+  it "exposes extension properties" do
+    @task.extension_properties.should == { "prop" => "value" }
+    @task.extension_property("prop").should == "value"
+    @task.extension_property("missing").should.be.nil
+  end
+
+  it "returns empty extension properties when none were sent" do
+    bare = Operaton::Bpm::Client::Task::Impl::ExternalTaskImpl.from_json({ "id" => "t" }, @object_mapper)
+    bare.extension_properties.should == {}
+  end
+
+  it "parses raw variables into TypedValueFields" do
+    @task.variables["amount"].type.should == "Double"
+    @task.variables["amount"].value.should == 42.5
+  end
+end

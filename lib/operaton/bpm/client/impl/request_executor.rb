@@ -141,3 +141,100 @@ module Operaton
     end
   end
 end
+
+__END__
+
+require "operaton-bpm-client"
+require "json"
+require "base64"
+require_relative "../../../../../spec/support/stub_engine_server"
+
+# Silence client logging during tests (mirrors spec_helper)
+Operaton::Bpm::Client.logger = Logger.new(File::NULL)
+
+describe Operaton::Bpm::Client::Impl::RequestExecutor do
+  before do
+    @object_mapper = Operaton::Bpm::Client::Impl::ObjectMapper.new
+    @server = StubEngineServer.new
+
+    @executor = lambda do |interceptors: []|
+      handler = Operaton::Bpm::Client::Interceptor::Impl::RequestInterceptorHandler.new(interceptors)
+      Operaton::Bpm::Client::Impl::RequestExecutor.new(@object_mapper, interceptor_handler: handler)
+    end
+
+    @simple_dto = -> { Operaton::Bpm::Client::Task::Impl::Dto::LockRequestDto.new("worker-1", 1000) }
+  end
+
+  after do
+    @server.stop
+  end
+
+  it "sends JSON with the Operaton user agent" do
+    @server.enqueue_response(status: 204)
+    @executor.call.post_request("#{@server.base_url}/external-task/t1/lock", @simple_dto.call,
+                                Operaton::Bpm::Client::Impl::RequestExecutor::VOID)
+
+    request = @server.last_request
+    request.method.should == "POST"
+    request.path.should == "/external-task/t1/lock"
+    request.headers["user-agent"].should == "Operaton External Task Client"
+    request.headers["content-type"].should == "application/json"
+    JSON.parse(request.body).should == { "workerId" => "worker-1", "lockDuration" => 1000 }
+  end
+
+  it "deserializes array responses into DTO lists" do
+    @server.enqueue_response(status: 200, body: [{ "id" => "task-1", "topicName" => "topic-a" }])
+    tasks = @executor.call.post_request("#{@server.base_url}/external-task/fetchAndLock", @simple_dto.call,
+                                        [Operaton::Bpm::Client::Task::Impl::ExternalTaskImpl])
+    tasks.size.should == 1
+    tasks.first.id.should == "task-1"
+    tasks.first.topic_name.should == "topic-a"
+  end
+
+  it "wraps HTTP error responses in EngineClientException with a RestException cause" do
+    @server.enqueue_response(status: 404, body: { "type" => "RestException",
+                                                  "message" => "task not found", "code" => 0 })
+    err = lambda do
+      @executor.call.post_request("#{@server.base_url}/external-task/missing/complete", @simple_dto.call,
+                                  Operaton::Bpm::Client::Impl::RequestExecutor::VOID)
+    end.should.raise(Operaton::Bpm::Client::Impl::EngineClientException)
+    err.cause.should.be.kind_of(Operaton::Bpm::Client::RestException)
+    err.cause.http_status_code.should == 404
+    err.cause.message.should == "task not found"
+  end
+
+  it "wraps connection failures in EngineClientException with an IO cause" do
+    closed_port_url = "http://127.0.0.1:1/external-task/fetchAndLock"
+    err = lambda do
+      @executor.call.post_request(closed_port_url, @simple_dto.call,
+                                  Operaton::Bpm::Client::Impl::RequestExecutor::VOID)
+    end.should.raise(Operaton::Bpm::Client::Impl::EngineClientException)
+    err.cause.should.be.kind_of(SystemCallError)
+  end
+
+  it "applies request interceptors such as BasicAuthProvider" do
+    @server.enqueue_response(status: 204)
+    auth = Operaton::Bpm::Client::Interceptor::Auth::BasicAuthProvider.new("demo", "demo")
+    @executor.call(interceptors: [auth]).post_request("#{@server.base_url}/external-task/t1/lock",
+                                                      @simple_dto.call,
+                                                      Operaton::Bpm::Client::Impl::RequestExecutor::VOID)
+
+    request = @server.last_request
+    request.headers["authorization"].should == "Basic #{Base64.strict_encode64('demo:demo')}"
+  end
+
+  it "supports callable interceptors" do
+    @server.enqueue_response(status: 204)
+    interceptor = ->(context) { context.add_header("X-Custom", "yes") }
+    @executor.call(interceptors: [interceptor]).post_request("#{@server.base_url}/external-task/t1/lock",
+                                                             @simple_dto.call,
+                                                             Operaton::Bpm::Client::Impl::RequestExecutor::VOID)
+    @server.last_request.headers["x-custom"].should == "yes"
+  end
+
+  it "returns raw bytes for GET requests" do
+    @server.enqueue_response(status: 200, body: "binary-data", content_type: "application/octet-stream")
+    body = @executor.call.get_request("#{@server.base_url}/process-instance/e1/variables/f/data")
+    body.should == "binary-data"
+  end
+end
