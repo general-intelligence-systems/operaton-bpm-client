@@ -1,9 +1,18 @@
 # Git hooks (managed by lefthook). Install with `bundle exec lefthook install`.
 #
-# Run the full test suite before every commit; a failing test blocks the
-# commit. Wrapped in `nix develop --command` because the hook fires outside the
-# flake devshell, so bundler/scampi wouldn't otherwise be on PATH.
+# pre-commit runs in parallel; any failing check aborts the commit:
+#   - rubocop lints the staged .rb files
+#   - trufflehog scans for verified secrets
+#   - the full test suite (bin/test)
+# trufflehog and bin/test run via `nix develop --command` since the hook fires
+# outside the flake devshell.
 pre-commit:
+  parallel: true
   commands:
+    rubocop:
+      glob: "*.rb"
+      run: bundle exec rubocop --force-exclusion {staged_files}
+    secrets:
+      run: nix develop --command trufflehog git file://. --since-commit HEAD --only-verified --fail
     tests:
       run: nix develop --command bin/test

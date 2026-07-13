@@ -25,5 +25,5 @@ jobs:
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 
-      - name: Run scampi
-        run: bundle exec scampi
+      - name: Run tests + lint (via lefthook pre-commit)
+        run: ./bin/test

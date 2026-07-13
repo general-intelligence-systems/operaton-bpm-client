@@ -26,6 +26,7 @@ Gem::Specification.new do |spec|
 
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.12"
+  spec.add_development_dependency "rubocop", "~> 1.60"
   spec.add_development_dependency "scampi", "~> 1.0"
   spec.add_development_dependency "lefthook", "~> 2.1"
 end
